@@ -40,7 +40,7 @@ const getBaseUrl = () => {
     return url;
   }
   
-  const url = 'http://localhost:5000';
+  const url = process.env.NEXT_PUBLIC_API_URL_LOCAL || 'http://localhost:5000';
   process.env.NEXTAUTH_URL = url;
   return url;
 };
@@ -122,14 +122,14 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async session({ session, token }) {
-      console.log('Session callback - session:', session, 'token:', token);
+      //console.log('Session callback - session:', session, 'token:', token);
       if (session.user) {
         session.user.id = token.sub!;
       }
       return session;
     },
     async jwt({ token, user, account, profile }) {
-      console.log('JWT callback - token:', token, 'user:', user, 'account:', account, 'profile:', profile);
+      //console.log('JWT callback - token:', token, 'user:', user, 'account:', account, 'profile:', profile);
       // If this is the first time the user is signing in
       if (user) {
         token.sub = user.id;

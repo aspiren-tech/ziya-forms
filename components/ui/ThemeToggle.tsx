@@ -2,10 +2,20 @@
 
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
-import { Button } from './Button'; // assumes you have a Button component (like shadcn/ui)
+import { Button } from './Button';
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
+  let theme: 'light' | 'dark' = 'light';
+  let toggleTheme: () => void = () => {};
+
+  try {
+    const themeContext = useTheme();
+    theme = themeContext.theme;
+    toggleTheme = themeContext.toggleTheme;
+  } catch (error) {
+    // During SSR or when ThemeProvider is not available, use default values
+    console.warn('ThemeToggle used outside ThemeProvider, using default theme');
+  }
 
   return (
     <Button
@@ -20,7 +30,7 @@ export function ThemeToggle() {
           theme === 'light' ? 'rotate-0 opacity-100' : 'rotate-90 opacity-0'
         }`}
       >
-        <Moon className="w-5 h-5 text-gray-800" />
+        <Moon className="w-5 h-5 text-gray-800 dark:text-gray-200" />
       </span>
 
       <span

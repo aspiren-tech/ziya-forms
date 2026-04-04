@@ -32,7 +32,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Prevent flash during hydration
-  if (!mounted) return null;
+  if (!mounted) {
+    return (
+      <div style={{ visibility: 'hidden' }}>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
