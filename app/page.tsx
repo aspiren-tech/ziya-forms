@@ -193,7 +193,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="border-t border-slate-800 pt-8 text-center text-slate-400">
-            <p>&copy; 2025 Ziya Forms. Built with Next.js, MySQL, and NextAuth.js. Made with ❤️ for form creators everywhere.</p>
+            <p>&copy; 2026 Ziya Forms. Made with ❤️ by ziyasuite.com.</p>
           </div>
         </div>
       </footer>
