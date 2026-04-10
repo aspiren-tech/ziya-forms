@@ -23,11 +23,14 @@ export async function GET(request: NextRequest, segmentData: Params) {
     const responses: any[] = await getResponsesWithAnswers(formId);
     
     // Prepare data for Excel export
-    const headers = ['Timestamp', 'Respondent Email', ...questions.map((q: any) => q.title)];
+    const headers = ['Timestamp', 'Submission Source', 'Respondent Email', 'Quiz Score', 'Quiz Max Score', ...questions.map((q: any) => q.title)];
     const rows = responses.map((response: any) => {
       const row: any[] = [
         new Date(response.submitted_at).toLocaleString(),
-        response.respondent_email || ''
+        response.submission_source === 'embed' ? 'Embed code' : 'Direct form',
+        response.respondent_email || '',
+        response.quiz_score ?? '',
+        response.quiz_max_score ?? '',
       ];
       
       questions.forEach((question: any) => {

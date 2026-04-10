@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getFormWithQuestions, updateForm, deleteForm, getFormById } from '@/lib/mysql/utils';
-import { nanoid } from 'nanoid';
+import { deleteManagedMediaUrl } from '@/lib/media';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,6 +56,8 @@ export async function PUT(request: NextRequest, segmentData: Params) {
       title: body.title,
       description: body.description,
       theme_color: body.theme_color,
+      banner_url: body.banner_url,
+      settings: body.settings,
       is_published: body.is_published,
       is_accepting_responses: body.is_accepting_responses,
     });
@@ -66,7 +68,11 @@ export async function PUT(request: NextRequest, segmentData: Params) {
     
     // Fetch updated form
     const updatedForm = await getFormById(id);
-    
+
+    if (existingForm?.banner_url && existingForm.banner_url !== updatedForm?.banner_url) {
+      await deleteManagedMediaUrl(existingForm.banner_url);
+    }
+
     return NextResponse.json({ form: updatedForm });
   } catch (error) {
     console.error('Error in PUT /api/forms/[id]:', error);

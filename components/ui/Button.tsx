@@ -15,9 +15,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     
     const variants = {
       primary: 'gradient-bg text-white hover:shadow-lg focus:ring-blue-500',
-      secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-100',
-      outline: 'border-2 gradient-border bg-transparent gradient-text hover:bg-gradient-to-r hover:from-blue-50 hover:to-green-50',
-      ghost: 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+      secondary: 'bg-[color:var(--bg-surface-light)] text-[color:var(--text-primary-light)] border border-[color:var(--border-light)] hover:bg-[color:var(--active-nav-light)] focus:ring-[color:var(--brand-primary-light)] dark:bg-[color:var(--bg-surface)] dark:text-[color:var(--text-primary)] dark:border-[color:var(--border-default)] dark:hover:bg-[color:var(--bg-surface-hover)]',
+      outline: 'border border-[color:var(--brand-primary-light)] bg-transparent text-[color:var(--brand-primary-light)] hover:bg-[color:var(--active-nav-light)]/60 focus:ring-[color:var(--brand-primary-light)] dark:border-[color:var(--brand-accent)] dark:text-[color:var(--brand-accent)] dark:hover:bg-[color:var(--bg-surface-hover)]',
+      ghost: 'bg-transparent hover:bg-[color:var(--active-nav-light)] text-[color:var(--text-secondary-light)] focus:ring-[color:var(--brand-primary-light)] dark:hover:bg-[color:var(--bg-surface-hover)] dark:text-[color:var(--text-secondary)]'
     };
     
     const sizes = {

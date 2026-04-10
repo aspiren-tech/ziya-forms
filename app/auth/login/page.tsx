@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/Button';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Chrome } from 'lucide-react';
-import { signIn, useSession } from 'next-auth/react';
+import { getSession, signIn, useSession } from 'next-auth/react';
+
+const getDestinationForRole = (role?: string | null) => {
+  return role === 'super_admin' ? '/admin/dashboard' : '/dashboard';
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,10 +23,15 @@ export default function LoginPage() {
   useEffect(() => {
     console.log('LoginPage useEffect - status:', status);
     if (status === 'authenticated') {
-      console.log('User already authenticated, redirecting to dashboard');
-      router.push('/dashboard');
+      const redirectAuthenticatedUser = async () => {
+        const currentSession = session ?? (await getSession());
+        console.log('User already authenticated, redirecting by role');
+        router.replace(getDestinationForRole(currentSession?.user?.role));
+      };
+
+      void redirectAuthenticatedUser();
     }
-  }, [status, router]);
+  }, [session, status, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +52,9 @@ export default function LoginPage() {
         setError('Invalid email or password');
         setLoading(false);
       } else if (result?.ok) {
-        console.log('Sign in successful, redirecting to dashboard');
-        // Wait a bit for the session to be established
-        // Then redirect to dashboard
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 500);
+        console.log('Sign in successful, redirecting by role');
+        const currentSession = await getSession();
+        router.replace(getDestinationForRole(currentSession?.user?.role));
       } else {
         setError('An unexpected error occurred. Please try again.');
         setLoading(false);

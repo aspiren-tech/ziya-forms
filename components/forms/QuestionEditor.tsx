@@ -10,9 +10,10 @@ interface QuestionEditorProps {
   question: Partial<Question>;
   onUpdate: (question: Partial<Question>) => void;
   onDelete: () => void;
+  isQuiz?: boolean;
 }
 
-export function QuestionEditor({ question, onUpdate, onDelete }: QuestionEditorProps) {
+export function QuestionEditor({ question, onUpdate, onDelete, isQuiz = false }: QuestionEditorProps) {
   const [localQuestion, setLocalQuestion] = useState(question);
 
   const handleChange = (field: string, value: any) => {
@@ -39,6 +40,10 @@ export function QuestionEditor({ question, onUpdate, onDelete }: QuestionEditorP
   };
 
   const needsOptions = ['multiple_choice', 'checkboxes', 'dropdown'].includes(localQuestion.type || '');
+  const optionValues = Array.isArray(localQuestion.options)
+    ? localQuestion.options.map((option: any) => (typeof option === 'string' ? option : option.label || option.value || '')).filter(Boolean)
+    : [];
+  const showQuizSettings = isQuiz && ['short_answer', 'paragraph', 'multiple_choice', 'checkboxes', 'dropdown', 'linear_scale'].includes(localQuestion.type || '');
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-4 border-l-4 border-blue-500">
@@ -132,6 +137,89 @@ export function QuestionEditor({ question, onUpdate, onDelete }: QuestionEditorP
                 value={localQuestion.settings?.max || 5}
                 onChange={(e) => handleChange('settings', { ...localQuestion.settings, max: parseInt(e.target.value) })}
               />
+            </div>
+          )}
+
+          {showQuizSettings && (
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="mb-3 text-sm font-semibold text-amber-900 dark:text-amber-200">Quiz settings</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input
+                  type="number"
+                  label="Points"
+                  min={0}
+                  value={localQuestion.settings?.points ?? 1}
+                  onChange={(e) => handleChange('settings', { ...localQuestion.settings, points: Number(e.target.value) || 0 })}
+                />
+
+                {localQuestion.type === 'multiple_choice' || localQuestion.type === 'dropdown' ? (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-amber-900 dark:text-amber-100">Correct answer</label>
+                    <select
+                      value={localQuestion.settings?.correctAnswer || ''}
+                      onChange={(e) => handleChange('settings', { ...localQuestion.settings, correctAnswer: e.target.value })}
+                      className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none dark:border-amber-900/60 dark:bg-slate-900 dark:text-white"
+                    >
+                      <option value="">Select correct answer</option>
+                      {optionValues.map((option, index) => (
+                        <option key={`${option}-${index}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {localQuestion.type === 'checkboxes' ? (
+                  <Input
+                    label="Correct answers"
+                    placeholder="Separate answers with commas"
+                    value={(localQuestion.settings?.correctAnswers || []).join(', ')}
+                    onChange={(e) =>
+                      handleChange('settings', {
+                        ...localQuestion.settings,
+                        correctAnswers: e.target.value
+                          .split(',')
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                ) : null}
+
+                {localQuestion.type === 'linear_scale' ? (
+                  <Input
+                    type="number"
+                    label="Correct answer"
+                    value={localQuestion.settings?.correctAnswer || ''}
+                    onChange={(e) => handleChange('settings', { ...localQuestion.settings, correctAnswer: e.target.value })}
+                  />
+                ) : null}
+
+                {localQuestion.type === 'short_answer' || localQuestion.type === 'paragraph' ? (
+                  <Input
+                    label="Correct answer"
+                    placeholder="Expected answer"
+                    value={localQuestion.settings?.correctAnswer || ''}
+                    onChange={(e) => handleChange('settings', { ...localQuestion.settings, correctAnswer: e.target.value })}
+                  />
+                ) : null}
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Feedback for correct answer"
+                  placeholder="Great job!"
+                  value={localQuestion.settings?.feedbackCorrect || ''}
+                  onChange={(e) => handleChange('settings', { ...localQuestion.settings, feedbackCorrect: e.target.value })}
+                />
+                <Input
+                  label="Feedback for incorrect answer"
+                  placeholder="Try again."
+                  value={localQuestion.settings?.feedbackIncorrect || ''}
+                  onChange={(e) => handleChange('settings', { ...localQuestion.settings, feedbackIncorrect: e.target.value })}
+                />
+              </div>
             </div>
           )}
         </div>

@@ -9,7 +9,10 @@ import { QuestionEditor } from '@/components/forms/QuestionEditor';
 import { Plus, Save, Eye, ArrowLeft, Link as LinkIcon, Copy } from 'lucide-react';
 import Link from 'next/link';
 import FormHeader from '@/components/ui/FormHeader';
+import { ImageCropPicker } from '@/components/forms/ImageCropPicker';
 import type { Form, Question } from '@/lib/types/database';
+import { FormSettingsModal } from '@/components/forms/FormSettingsModal';
+import { normalizeFormSettings } from '@/lib/form-settings';
 
 export default function FormEditPage() {
   const router = useRouter();
@@ -23,6 +26,7 @@ export default function FormEditPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -65,7 +69,7 @@ export default function FormEditPage() {
         title: '',
         type: 'short_answer',
         options: [],
-        is_required: false,
+        is_required: form?.settings?.default_question_required ?? false,
         order_index: questions.length,
         settings: {},
         created_at: new Date().toISOString(),
@@ -97,6 +101,8 @@ export default function FormEditPage() {
           title: form.title,
           description: form.description,
           theme_color: form.theme_color,
+          banner_url: form.banner_url,
+          settings: form.settings,
           is_published: form.is_published,
           is_accepting_responses: form.is_accepting_responses,
         }),
@@ -211,11 +217,13 @@ export default function FormEditPage() {
         title="Form Builder"
         showPreviewButton
         showSaveButton
+        showSettingsButton
         onPreview={() => window.open(`/form/${formId}`, '_blank')}
         onSave={saveForm}
         onPublish={togglePublish}
         onCopyEmbed={copyEmbedCode}
         onCopyLink={copyPublicLink}
+        onSettings={() => setShowSettingsModal(true)}
         isSaving={isSaving}
         isPublishing={isPublishing}
         isPublished={form?.is_published}
@@ -224,6 +232,18 @@ export default function FormEditPage() {
         showCopyLinkButton
         embedUrl={form?.is_published ? `${window.location.origin}/form/${formId}` : ''}
       />
+
+      {showSettingsModal && (
+        <FormSettingsModal
+          open={showSettingsModal}
+          settings={form?.settings || normalizeFormSettings()}
+          onClose={() => setShowSettingsModal(false)}
+          onSave={(nextSettings) => {
+            setForm((prev) => prev ? { ...prev, settings: nextSettings } : prev);
+            setShowSettingsModal(false);
+          }}
+        />
+      )}
 
       {/* Embed Modal */}
       {showEmbedModal && (
@@ -313,21 +333,50 @@ export default function FormEditPage() {
       )}
 
       <div className="container mx-auto px-6 py-8 max-w-4xl">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6">
-          <Input
-            type="text"
-            value={form?.title || ''}
-            onChange={(e) => setForm(prev => prev ? { ...prev, title: e.target.value } : null)}
-            className="text-3xl font-bold mb-4"
-            placeholder="Form Title"
-          />
-          <Input
-            type="text"
-            value={form?.description || ''}
-            onChange={(e) => setForm(prev => prev ? { ...prev, description: e.target.value } : null)}
-            className="text-gray-600"
-            placeholder="Form description (optional)"
-          />
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900 mb-6">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 p-6 dark:border-slate-800">
+            <ImageCropPicker
+              label="Banner"
+              description="Choose a banner image and position it like Google Forms."
+              value={form?.banner_url || null}
+              onChange={(bannerUrl) => setForm(prev => prev ? { ...prev, banner_url: bannerUrl } : null)}
+              aspectRatio={4}
+              buttonLabel="Choose banner image"
+              emptyLabel="Add a banner to give the form a stronger visual identity."
+              cropTitle="Crop form banner"
+              cropHint="Drag to move the image and use zoom to fit the most important area."
+              previewClassName="rounded-2xl border-white/10"
+              uploadScope="forms/banners"
+            />
+          </div>
+
+          <div className="space-y-4 p-8">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
+                Form title
+              </p>
+              <Input
+                type="text"
+                value={form?.title || ''}
+                onChange={(e) => setForm(prev => prev ? { ...prev, title: e.target.value } : null)}
+                className="mt-2 border-0 bg-transparent px-0 text-4xl font-bold tracking-tight text-slate-950 placeholder:text-slate-400 focus-visible:ring-0 dark:text-white"
+                placeholder="Form Title"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
+                Description
+              </p>
+              <Input
+                type="text"
+                value={form?.description || ''}
+                onChange={(e) => setForm(prev => prev ? { ...prev, description: e.target.value } : null)}
+                className="mt-2 border-0 bg-slate-50 text-slate-700 focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="Form description (optional)"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -337,6 +386,7 @@ export default function FormEditPage() {
               question={question}
               onUpdate={(updated) => updateQuestion(index, updated)}
               onDelete={() => deleteQuestion(index)}
+              isQuiz={form?.settings?.is_quiz ?? false}
             />
           ))}
         </div>

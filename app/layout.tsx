@@ -13,8 +13,8 @@ const quicksand = Quicksand({
 });
 
 export const metadata: Metadata = {
-  title: APP_NAME,
-  description: APP_DESCRIPTION,
+  title: "Ziya Forms",
+  description: "Ziya Forms",
 };
 
 export default function RootLayout({

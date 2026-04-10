@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import type { FormWithQuestions } from '@/lib/types/database';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, BarChart3, PencilLine, Repeat2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { useFormDraftAutosave } from '@/lib/useFormDraftAutosave';
 
 export default function FormViewPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const formId = params?.id as string;
+  const editToken = searchParams.get('edit_token') || '';
   const { data: session, status } = useSession();
 
   const [form, setForm] = useState<FormWithQuestions | null>(null);
@@ -21,29 +24,44 @@ export default function FormViewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [respondentEmail, setRespondentEmail] = useState('');
+  const [editResponseToken, setEditResponseToken] = useState<string | null>(null);
+  const [quizResult, setQuizResult] = useState<{
+    score: number;
+    maxScore: number;
+    percentage: number;
+    results: Array<{
+      question_id: string;
+      is_correct: boolean;
+      points_awarded: number;
+      points_possible: number;
+      feedback?: string;
+      correct_answer?: string;
+    }>;
+  } | null>(null);
 
   useEffect(() => {
     if (formId) {
       fetchForm();
     }
-  }, [formId, status]);
+  }, [formId, status, editToken]);
 
   const fetchForm = async () => {
     try {
-      // If user is authenticated, use the regular API endpoint
-      // Otherwise, use the public endpoint
-      const endpoint = status === 'authenticated' 
+      const endpoint = status === 'authenticated'
         ? `/api/forms/${formId}`
         : `/api/forms/${formId}/public`;
-      
+
       const response = await fetch(endpoint);
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to fetch form');
       }
-      
+
       setForm(data.form);
+      if (editToken) {
+        await hydrateEditableResponse(editToken);
+      }
     } catch (error) {
       console.error('Failed to fetch form:', error);
     } finally {
@@ -51,49 +69,126 @@ export default function FormViewPage() {
     }
   };
 
+  const hydrateEditableResponse = async (token: string) => {
+    try {
+      const response = await fetch(`/api/forms/${formId}/response/${token}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load editable response');
+      }
+
+      const answerState: Record<string, any> = {};
+      data.response.answers?.forEach((answer: any) => {
+        if (answer.answer_text) {
+          try {
+            const parsed = JSON.parse(answer.answer_text);
+            answerState[answer.question_id] = parsed;
+            return;
+          } catch {
+            answerState[answer.question_id] = answer.answer_text;
+            return;
+          }
+        }
+
+        answerState[answer.question_id] = answer.answer_data || '';
+      });
+
+      setAnswers(answerState);
+      setRespondentEmail(data.response.respondent_email || '');
+      setEditResponseToken(token);
+    } catch (error) {
+      console.error('Failed to hydrate editable response:', error);
+    }
+  };
+
+  const displayQuestions = useMemo(() => {
+    if (!form) return [];
+    const questions = [...form.questions];
+    if (!form.settings?.shuffle_question_order) {
+      return questions;
+    }
+
+    return questions.sort(() => Math.random() - 0.5);
+  }, [form]);
+
+  const shouldCollectEmail = !!form && (form.settings?.collect_email_addresses !== 'off' || form.settings?.limit_to_one_response);
+  const isEmailRequired = !!form && (form.settings?.collect_email_addresses === 'required' || form.settings?.limit_to_one_response);
+  const answeredCount = Object.values(answers).filter((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    return String(value ?? '').trim().length > 0;
+  }).length;
+  const progressPercentage = displayQuestions.length > 0 ? Math.min(100, Math.round((answeredCount / displayQuestions.length) * 100)) : 0;
+
+  const { clearDraft } = useFormDraftAutosave({
+    formId,
+    editToken: editToken || editResponseToken || null,
+    disabled: !!form?.settings?.disable_autosave,
+    submitSuccess,
+    answers,
+    respondentEmail,
+    onRestore: ({ answers: restoredAnswers, respondentEmail: restoredEmail }) => {
+      setAnswers(restoredAnswers);
+      setRespondentEmail(restoredEmail || '');
+    },
+  });
+
   const handleAnswerChange = (questionId: string, value: any) => {
-    setAnswers(prev => ({
+    setAnswers((prev) => ({
       ...prev,
-      [questionId]: value
+      [questionId]: value,
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
-    
+
     setIsSubmitting(true);
-    
+
     try {
-      // Prepare answers for submission
-      const answersToSubmit = form.questions.map(question => ({
+      const answersToSubmit = form.questions.map((question) => ({
         question_id: question.id,
         answer_text: answers[question.id] || '',
-        answer_data: {}
+        answer_data: {},
       }));
-      
-      // Use public endpoint for unauthenticated users, regular endpoint for authenticated users
-      const endpoint = status === 'authenticated' 
+
+      const endpoint = status === 'authenticated'
         ? `/api/forms/${formId}/submit`
         : `/api/forms/${formId}/submit/public`;
-      
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           response_data: {
             respondent_email: respondentEmail,
-            answers: answersToSubmit
-          }
+            submission_source: 'direct',
+            edit_token: editResponseToken,
+            answers: answersToSubmit,
+          },
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to submit response');
       }
-      
+
+      if (data.edit_token) {
+        setEditResponseToken(data.edit_token);
+      }
+      setQuizResult(
+        form?.settings?.is_quiz
+          ? {
+              score: Number(data.quiz_score || 0),
+              maxScore: Number(data.quiz_max_score || 0),
+              percentage: Number(data.quiz_max_score) > 0 ? Math.round((Number(data.quiz_score || 0) / Number(data.quiz_max_score)) * 100) : 0,
+              results: Array.isArray(data.quiz_results) ? data.quiz_results : [],
+            }
+          : null
+      );
       setSubmitSuccess(true);
     } catch (error) {
       console.error('Failed to submit response:', error);
@@ -105,18 +200,20 @@ export default function FormViewPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--bg-primary-light)] dark:bg-[color:var(--bg-primary)]">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-[color:var(--brand-primary-light)] dark:border-[color:var(--brand-accent)]" />
       </div>
     );
   }
 
   if (!form) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--bg-primary-light)] dark:bg-[color:var(--bg-primary)]">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Form Not Found</h1>
-          <p className="text-gray-600">The form you're looking for doesn't exist or is no longer available.</p>
+          <h1 className="mb-4 text-2xl font-bold text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">Form Not Found</h1>
+          <p className="text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+            The form you're looking for doesn't exist or is no longer available.
+          </p>
         </div>
       </div>
     );
@@ -124,10 +221,12 @@ export default function FormViewPage() {
 
   if (!form.is_published) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--bg-primary-light)] dark:bg-[color:var(--bg-primary)]">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Form Not Published</h1>
-          <p className="text-gray-600">This form is not currently accepting responses.</p>
+          <h1 className="mb-4 text-2xl font-bold text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">Form Not Published</h1>
+          <p className="text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+            This form is not currently accepting responses.
+          </p>
         </div>
       </div>
     );
@@ -135,14 +234,82 @@ export default function FormViewPage() {
 
   if (submitSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-4">Response Submitted!</h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Thank you for completing the form. Your response has been recorded.
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--bg-primary-light)] dark:bg-[color:var(--bg-primary)]">
+        <div className="w-full max-w-md rounded-3xl border border-[color:var(--border-light)] bg-[color:var(--bg-surface-light)] p-8 text-center shadow-[0_30px_80px_rgba(15,23,42,0.12)] dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface)]">
+          <CheckCircle className="mx-auto mb-4 h-16 w-16 text-[color:var(--status-success-text-light)] dark:text-[color:var(--status-success)]" />
+          <h1 className="mb-4 text-2xl font-bold text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">Response Submitted!</h1>
+          <p className="mb-6 text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+            {form.settings?.confirmation_message || 'Thank you for completing the form. Your response has been recorded.'}
           </p>
-          <Button onClick={() => router.push('/')}>
+          {form.settings?.is_quiz && quizResult && (
+            <div className="mb-6 rounded-2xl border border-[color:var(--border-light)] bg-[color:var(--bg-primary-light)] p-4 text-left dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface-hover)]">
+              <p className="text-sm font-semibold text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
+                Quiz score: {quizResult.score} / {quizResult.maxScore} ({quizResult.percentage}%)
+              </p>
+              {quizResult.results.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {quizResult.results.map((item) => (
+                    <div key={item.question_id} className="rounded-xl bg-[color:var(--bg-surface-light)] p-3 dark:bg-[color:var(--bg-surface)]">
+                      <p className="text-sm font-medium text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
+                        {item.is_correct ? 'Correct' : 'Incorrect'} - {item.points_awarded}/{item.points_possible}
+                      </p>
+                      {item.feedback && (
+                        <p className="mt-1 text-sm text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">{item.feedback}</p>
+                      )}
+                      {!item.is_correct && item.correct_answer && (
+                        <p className="mt-1 text-xs text-[color:var(--text-muted)] dark:text-[color:var(--text-secondary)]">
+                          Correct answer: {item.correct_answer}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex flex-col gap-3">
+            {form.settings?.show_submit_another_response && (
+              <Button
+                onClick={() => {
+                  setSubmitSuccess(false);
+                  setAnswers({});
+                  setRespondentEmail('');
+                  setEditResponseToken(null);
+                  setQuizResult(null);
+                  clearDraft();
+                  router.replace(`/form/${formId}`);
+                }}
+                variant="secondary"
+                className="w-full"
+              >
+                <Repeat2 className="mr-2 h-4 w-4" />
+                Submit another response
+              </Button>
+            )}
+
+            {form.settings?.show_results_summary && (
+              <Button
+                onClick={() => router.push(`/form/${formId}/summary`)}
+                variant="outline"
+                className="w-full"
+              >
+                <BarChart3 className="mr-2 h-4 w-4" />
+                View results summary
+              </Button>
+            )}
+
+            {form.settings?.allow_response_editing && editResponseToken && (
+              <Button
+                onClick={() => router.push(`/form/${formId}?edit_token=${editResponseToken}`)}
+                variant="ghost"
+                className="w-full"
+              >
+                <PencilLine className="mr-2 h-4 w-4" />
+                Edit response
+              </Button>
+            )}
+          </div>
+          <Button onClick={() => router.push('/')} className="bg-[color:var(--brand-primary-light)] text-white dark:bg-[color:var(--brand-primary)]">
             Back to Home
           </Button>
         </div>
@@ -151,55 +318,93 @@ export default function FormViewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-      <div className="container mx-auto px-4 max-w-2xl">
-        <div 
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden mb-6"
-          style={{ borderTop: `8px solid ${form.theme_color || '#3b84f2'}` }}
-        >
-          <div className="p-8">
-            <h1 className="text-3xl font-bold mb-4">{form.title}</h1>
-            {form.description && (
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{form.description}</p>
-            )}
-            
-            <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Your Email (optional)
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={respondentEmail}
-                onChange={(e) => setRespondentEmail(e.target.value)}
-                placeholder="your@email.com"
-              />
+    <div className="min-h-screen bg-[color:var(--bg-primary-light)] py-8 dark:bg-[color:var(--bg-primary)]">
+      <div className="container mx-auto max-w-2xl px-4">
+        {form.settings?.show_progress_bar && (
+          <div className="mb-4 overflow-hidden rounded-full border border-[color:var(--border-light)] bg-[color:var(--bg-surface-light)] dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface)]">
+            <div
+              className="h-2 rounded-full bg-[color:var(--brand-primary-light)] dark:bg-[color:var(--brand-accent)]"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+        )}
+
+        <div className="mb-6 overflow-hidden rounded-3xl border border-[color:var(--border-light)] bg-[color:var(--bg-surface-light)] shadow-[0_24px_60px_rgba(15,23,42,0.1)] dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface)]">
+          {form.banner_url ? (
+            <div className="h-56 w-full overflow-hidden bg-[color:var(--bg-primary-light)] dark:bg-[color:var(--bg-surface-hover)]">
+              <img src={form.banner_url} alt={form.title} className="h-full w-full object-cover" />
             </div>
+          ) : (
+            <div
+              className="h-3 w-full"
+              style={{ background: `linear-gradient(90deg, ${form.theme_color || '#2563eb'}, #0ea5e9)` }}
+            />
+          )}
+
+          <div className="p-8">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[color:var(--active-nav-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--brand-primary-light)] dark:bg-[color:var(--bg-surface-hover)] dark:text-[color:var(--brand-accent)]">
+              External form
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
+              {form.title}
+            </h1>
+            {form.description && (
+              <p className="mt-3 text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+                {form.description}
+              </p>
+            )}
+
+            {shouldCollectEmail && (
+              <div className="mt-8">
+                <label htmlFor="email" className="mb-2 block text-sm font-medium text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+                  Your Email {isEmailRequired ? '(required)' : '(optional)'}
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={respondentEmail}
+                  onChange={(e) => setRespondentEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  required={isEmailRequired}
+                />
+                {form.settings?.limit_to_one_response && (
+                  <p className="mt-2 text-xs text-[color:var(--text-muted)] dark:text-[color:var(--text-secondary)]">
+                    Email addresses are used to limit responses to one submission.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
-          {form.questions.map((question, index) => (
-            <div 
-              key={question.id} 
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden"
+          {displayQuestions.map((question, index) => (
+            <div
+              key={question.id}
+              className="overflow-hidden rounded-2xl border border-[color:var(--border-light)] bg-[color:var(--bg-surface-light)] shadow-sm dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface)]"
             >
+              <div
+                className="h-1 w-full"
+                style={{ background: form.theme_color || 'var(--brand-primary-light)' }}
+              />
               <div className="p-6">
-                <div className="flex items-start mb-4">
-                  <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-medium mr-3 mt-1">
+                <div className="mb-4 flex items-start">
+                  <span className="mr-3 mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--active-nav-light)] font-medium text-[color:var(--brand-primary-light)] dark:bg-[color:var(--bg-surface-hover)] dark:text-[color:var(--brand-accent)]">
                     {index + 1}
                   </span>
                   <div>
-                    <h3 className="text-lg font-medium">
+                    <h3 className="text-lg font-semibold text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
                       {question.title}
-                      {question.is_required && <span className="text-red-500 ml-1">*</span>}
+                      {question.is_required && <span className="ml-1 text-red-500">*</span>}
                     </h3>
                     {question.description && (
-                      <p className="text-gray-600 dark:text-gray-400 mt-1">{question.description}</p>
+                      <p className="mt-1 text-[color:var(--text-secondary-light)] dark:text-[color:var(--text-secondary)]">
+                        {question.description}
+                      </p>
                     )}
                   </div>
                 </div>
-                
+
                 {question.type === 'short_answer' && (
                   <Input
                     value={answers[question.id] || ''}
@@ -208,7 +413,7 @@ export default function FormViewPage() {
                     placeholder="Your answer"
                   />
                 )}
-                
+
                 {question.type === 'paragraph' && (
                   <Textarea
                     value={answers[question.id] || ''}
@@ -218,29 +423,29 @@ export default function FormViewPage() {
                     rows={4}
                   />
                 )}
-                
+
                 {(question.type === 'multiple_choice' || question.type === 'dropdown') && (
                   <div className="space-y-2">
                     {Array.isArray(question.options) && question.options.map((option: any, idx: number) => (
                       <div key={idx} className="flex items-center">
                         <input
-                          type={question.type === 'multiple_choice' ? 'radio' : 'radio'}
+                          type="radio"
                           id={`${question.id}-${idx}`}
                           name={question.id}
                           value={typeof option === 'string' ? option : option.value}
                           checked={answers[question.id] === (typeof option === 'string' ? option : option.value)}
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleAnswerChange(question.id, e.target.value)}
                           required={question.is_required}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 text-[color:var(--brand-primary-light)] focus:ring-[color:var(--brand-primary-light)] dark:text-[color:var(--brand-accent)]"
                         />
-                        <label htmlFor={`${question.id}-${idx}`} className="ml-3 block text-gray-700 dark:text-gray-300">
+                        <label htmlFor={`${question.id}-${idx}`} className="ml-3 block text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
                           {typeof option === 'string' ? option : option.label}
                         </label>
                       </div>
                     ))}
                   </div>
                 )}
-                
+
                 {question.type === 'checkboxes' && (
                   <div className="space-y-2">
                     {Array.isArray(question.options) && question.options.map((option: any, idx: number) => (
@@ -259,9 +464,9 @@ export default function FormViewPage() {
                               handleAnswerChange(question.id, currentValue.filter((v: string) => v !== e.target.value));
                             }
                           }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+                          className="h-4 w-4 rounded text-[color:var(--brand-primary-light)] focus:ring-[color:var(--brand-primary-light)] dark:text-[color:var(--brand-accent)]"
                         />
-                        <label htmlFor={`${question.id}-${idx}`} className="ml-3 block text-gray-700 dark:text-gray-300">
+                        <label htmlFor={`${question.id}-${idx}`} className="ml-3 block text-[color:var(--text-primary-light)] dark:text-[color:var(--text-primary)]">
                           {typeof option === 'string' ? option : option.label}
                         </label>
                       </div>
@@ -271,29 +476,33 @@ export default function FormViewPage() {
               </div>
             </div>
           ))}
-          
+
           <div className="flex justify-end">
             <Button
               type="submit"
               isLoading={isSubmitting}
-              className="px-8 py-3"
+              className="px-8 py-3 text-white dark:text-white"
+              style={{
+                background: 'linear-gradient(to right, #2563eb, #0ea5e9)',
+              }}
             >
               Submit
             </Button>
           </div>
         </form>
-        
-        {/* Powered by Ziya Forms footer */}
-        <div className="mt-8 text-center">
-          <a 
-            href="https://ziyaforms.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-          >
-            Powered by Ziya Forms
-          </a>
-        </div>
+
+        {form.owner_plan !== 'paid' && (
+          <div className="mt-8 text-center">
+            <a
+              href="https://ziyaforms.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[color:var(--text-muted)] hover:text-[color:var(--text-primary-light)] dark:text-[color:var(--text-secondary)] dark:hover:text-[color:var(--text-primary)]"
+            >
+              Powered by Ziya Forms
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

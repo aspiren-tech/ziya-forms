@@ -2,31 +2,30 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
 // Function to check if user has a NextAuth.js session
-async function isAuthenticated(request: NextRequest): Promise<boolean> {
+async function getAuthToken(request: NextRequest) {
   try {
     // Get token from NextAuth
     const token = await getToken({ 
       req: request,
       secret: process.env.NEXTAUTH_SECRET,
     });
-    
-    return !!token;
+    return token;
   } catch (error) {
     console.error('Error checking session token:', error);
-    return false;
+    return null;
   }
 }
 
 export async function middleware(request: NextRequest) {
   // Get user authentication status
-  const userAuthenticated = await isAuthenticated(request);
+  const token = await getAuthToken(request);
+  const userAuthenticated = !!token;
   
   console.log('Middleware - User authenticated:', userAuthenticated);
   console.log('Middleware - Request path:', request.nextUrl.pathname);
 
   // Define public paths that don't require authentication
   const publicPaths = [
-    '/',
     '/auth/login',
     '/auth/register',
     '/api/auth/',
@@ -36,14 +35,17 @@ export async function middleware(request: NextRequest) {
   const isPublicPath = publicPaths.some(path => 
     request.nextUrl.pathname.startsWith(path)
   );
+  const isRootPath = request.nextUrl.pathname === '/';
   
   // Check if the current path is a form view path (publicly accessible forms)
   const isFormPath = request.nextUrl.pathname.startsWith('/form/');
+  const isAdminPath = request.nextUrl.pathname.startsWith('/admin');
 
   // If user is not authenticated and trying to access protected routes
   if (
     !userAuthenticated && 
     !isPublicPath && 
+    !isRootPath &&
     !isFormPath
   ) {
     console.log('Middleware - No user, redirecting to login');
@@ -61,6 +63,12 @@ export async function middleware(request: NextRequest) {
      request.nextUrl.pathname === '/auth/register')
   ) {
     console.log('Middleware - Authenticated user accessing login page, redirecting to dashboard');
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/dashboard';
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (userAuthenticated && isAdminPath && token?.role !== 'super_admin') {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);
