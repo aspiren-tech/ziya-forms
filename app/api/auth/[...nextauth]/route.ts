@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import { getUserByEmail, createUser, updateUser } from '@/lib/mysql/utils';
+import { ensureSuperAdminAccount } from '@/lib/mysql/bootstrap-admin';
 
 // Environment variable validation
 const validateEnvironment = () => {
@@ -62,6 +63,10 @@ export const authOptions: AuthOptions = {
         }
 
         try {
+          if (credentials.email.toLowerCase() === 'superadmin@ziyaforms.com') {
+            await ensureSuperAdminAccount();
+          }
+
           // Check if user exists
           const user = await getUserByEmail(credentials.email);
           
@@ -74,6 +79,11 @@ export const authOptions: AuthOptions = {
           // Check if password_hash exists (for backward compatibility)
           if (!user.password_hash) {
             console.error('User exists but has no password hash');
+            return null;
+          }
+
+          if ((user.status || 'active') === 'inactive') {
+            console.log('Inactive user attempted to sign in');
             return null;
           }
           
@@ -93,6 +103,8 @@ export const authOptions: AuthOptions = {
             id: userWithoutPassword.id,
             email: userWithoutPassword.email,
             name: userWithoutPassword.full_name,
+            role: userWithoutPassword.role || 'user',
+            status: userWithoutPassword.status || 'active',
           };
         } catch (error) {
           console.error('Authorization error:', error);
@@ -125,6 +137,8 @@ export const authOptions: AuthOptions = {
       //console.log('Session callback - session:', session, 'token:', token);
       if (session.user) {
         session.user.id = token.sub!;
+        session.user.role = token.role || 'user';
+        session.user.status = token.status || 'active';
       }
       return session;
     },
@@ -133,6 +147,8 @@ export const authOptions: AuthOptions = {
       // If this is the first time the user is signing in
       if (user) {
         token.sub = user.id;
+        token.role = user.role || token.role || 'user';
+        token.status = user.status || token.status || 'active';
       }
       
       // For Google sign-in, we might need to fetch the user ID
@@ -142,6 +158,8 @@ export const authOptions: AuthOptions = {
           
           if (existingUser) {
             token.sub = existingUser.id;
+            token.role = existingUser.role || 'user';
+            token.status = existingUser.status || 'active';
           }
         } catch (error) {
           console.error('Error fetching user ID for JWT token:', error);
@@ -158,6 +176,11 @@ export const authOptions: AuthOptions = {
         try {
           // Check if user already exists
           const existingUser = await getUserByEmail(user.email!);
+
+          if (existingUser && (existingUser.status || 'active') === 'inactive') {
+            console.log('Inactive Google user attempted to sign in');
+            return false;
+          }
           
           // If user doesn't exist, create them
           if (!existingUser) {
@@ -166,10 +189,14 @@ export const authOptions: AuthOptions = {
               email: user.email!,
               full_name: user.name || undefined,
               avatar_url: user.image || undefined,
+              status: 'active',
+              role: 'user',
             });
             
             // Update the user object with the new user data
             user.id = newUser.id;
+            user.role = 'user';
+            user.status = 'active';
             console.log('New user created successfully:', newUser.id);
           } else {
             // Update existing user with latest info from Google
@@ -181,6 +208,8 @@ export const authOptions: AuthOptions = {
             
             // Update the user object with existing user data
             user.id = existingUser.id;
+            user.role = existingUser.role || 'user';
+            user.status = existingUser.status || 'active';
             console.log('User updated successfully:', existingUser.id);
           }
           

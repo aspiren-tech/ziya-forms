@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_FORM_THEME_COLOR } from '@/lib/config';
+import { DEFAULT_FORM_SETTINGS } from '@/lib/form-settings';
 import { getCurrentUser } from '@/lib/auth';
 import { createForm, getFormsByUserId, createQuestion } from '@/lib/mysql/utils';
+import { getTemplateById } from '@/lib/mysql/platform';
 import { nanoid } from 'nanoid';
 
 // GET all forms for the current user
@@ -35,15 +37,22 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { title, description, theme_color } = body;
+    const { title, description, theme_color, template_id } = body;
+
+    let template = null;
+    if (template_id) {
+      template = await getTemplateById(template_id);
+    }
 
     // Create a new form in MySQL
     const formData: any = {
       id: nanoid(),
       user_id: user.id,
-      title: title || 'Untitled Form',
-      description: description || '',
+      title: title || template?.title || 'Untitled Form',
+      description: description || template?.description || '',
       theme_color: theme_color || DEFAULT_FORM_THEME_COLOR,
+      banner_url: null,
+      settings: DEFAULT_FORM_SETTINGS,
       is_published: false,
       is_accepting_responses: true,
     };
@@ -51,8 +60,12 @@ export async function POST(request: NextRequest) {
     // Try to insert the form data
     const form = await createForm(formData);
     
-    // Create default questions for the new form
-    await createDefaultQuestions(form.id);
+    if (template?.questions?.length) {
+      await createTemplateQuestions(form.id, template.questions as any[], formData.settings.default_question_required);
+    } else {
+      // Create default questions for the new form
+      await createDefaultQuestions(form.id, formData.settings.default_question_required);
+    }
     
     return NextResponse.json({ form }, { status: 201 });
   } catch (error: any) {
@@ -61,7 +74,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function createDefaultQuestions(formId: string) {
+async function createDefaultQuestions(formId: string, requiredByDefault = false) {
   const defaultQuestions = [
     {
       id: nanoid(),
@@ -69,7 +82,7 @@ async function createDefaultQuestions(formId: string) {
       title: 'What is your name?',
       type: 'short_answer',
       options: [],
-      is_required: true,
+      is_required: requiredByDefault,
       order_index: 0,
       settings: {},
     },
@@ -79,7 +92,7 @@ async function createDefaultQuestions(formId: string) {
       title: 'What is your email?',
       type: 'short_answer',
       options: [],
-      is_required: true,
+      is_required: requiredByDefault,
       order_index: 1,
       settings: {},
     }
@@ -91,6 +104,26 @@ async function createDefaultQuestions(formId: string) {
       await createQuestion(question);
     } catch (error) {
       console.error('Error creating default question:', error);
+    }
+  }
+}
+
+async function createTemplateQuestions(formId: string, templateQuestions: any[], requiredByDefault = false) {
+  for (const [index, question] of templateQuestions.entries()) {
+    try {
+      await createQuestion({
+        id: nanoid(),
+        form_id: formId,
+        title: question.title || `Question ${index + 1}`,
+        description: question.description || '',
+        type: question.type || 'short_answer',
+        options: Array.isArray(question.options) ? question.options : [],
+        is_required: question.is_required !== undefined ? question.is_required : requiredByDefault,
+        order_index: question.order_index !== undefined ? question.order_index : index,
+        settings: question.settings || {},
+      });
+    } catch (error) {
+      console.error('Error creating template question:', error);
     }
   }
 }
