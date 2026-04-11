@@ -39,6 +39,7 @@ export async function middleware(request: NextRequest) {
   
   // Check if the current path is a form view path (publicly accessible forms)
   const isFormPath = request.nextUrl.pathname.startsWith('/form/');
+  const isEmbedPath = request.nextUrl.pathname.startsWith('/forms/embed');
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin');
 
   // If user is not authenticated and trying to access protected routes
@@ -46,7 +47,8 @@ export async function middleware(request: NextRequest) {
     !userAuthenticated && 
     !isPublicPath && 
     !isRootPath &&
-    !isFormPath
+    !isFormPath &&
+    !isEmbedPath
   ) {
     console.log('Middleware - No user, redirecting to login');
     // Redirect to login page

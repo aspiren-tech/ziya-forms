@@ -119,6 +119,31 @@ export function ensureAdminSchema() {
         await connection.execute(`UPDATE users SET role = 'user' WHERE role IS NULL`);
         await connection.execute(`UPDATE users SET billing_plan = 'free' WHERE billing_plan IS NULL`);
         await connection.execute(`UPDATE responses SET submission_source = 'direct' WHERE submission_source IS NULL`);
+
+        const [formsUserIndex]: any = await connection.execute("SHOW INDEX FROM forms WHERE Key_name = 'idx_forms_user_id'");
+        if (formsUserIndex.length === 0) {
+          await connection.execute(`CREATE INDEX idx_forms_user_id ON forms (user_id)`);
+        }
+
+        const [questionsFormIndex]: any = await connection.execute("SHOW INDEX FROM questions WHERE Key_name = 'idx_questions_form_id'");
+        if (questionsFormIndex.length === 0) {
+          await connection.execute(`CREATE INDEX idx_questions_form_id ON questions (form_id)`);
+        }
+
+        const [responsesFormIndex]: any = await connection.execute("SHOW INDEX FROM responses WHERE Key_name = 'idx_responses_form_id'");
+        if (responsesFormIndex.length === 0) {
+          await connection.execute(`CREATE INDEX idx_responses_form_id ON responses (form_id)`);
+        }
+
+        const [answersResponseIndex]: any = await connection.execute("SHOW INDEX FROM answers WHERE Key_name = 'idx_answers_response_id'");
+        if (answersResponseIndex.length === 0) {
+          await connection.execute(`CREATE INDEX idx_answers_response_id ON answers (response_id)`);
+        }
+
+        const [responsesEditTokenIndex]: any = await connection.execute("SHOW INDEX FROM responses WHERE Key_name = 'idx_responses_edit_token'");
+        if (responsesEditTokenIndex.length === 0) {
+          await connection.execute(`CREATE INDEX idx_responses_edit_token ON responses (edit_token)`);
+        }
       } finally {
         connection.release();
       }

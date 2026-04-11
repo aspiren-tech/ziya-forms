@@ -40,6 +40,7 @@ export default function FormViewPage() {
   } | null>(null);
 
   useEffect(() => {
+    if (status === 'loading') return;
     if (formId) {
       fetchForm();
     }

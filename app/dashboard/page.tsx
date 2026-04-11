@@ -19,39 +19,28 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    console.log('Dashboard useEffect triggered', { status, session });
-    
-    if (status === 'loading') {
-      console.log('Session is loading...');
-      return;
-    }
-    
-    if (status === 'unauthenticated') {
-      console.log('User is unauthenticated, redirecting to login');
-      router.push('/auth/login');
-      return;
-    }
-    
-    if (!session) {
-      console.log('No session found, redirecting to login');
+    if (status === 'loading') return;
+
+    if (status === 'unauthenticated' || !session) {
       router.push('/auth/login');
       return;
     }
 
     if (session.user?.role === 'super_admin') {
-      console.log('Super admin detected, redirecting to admin dashboard');
       router.replace('/admin/dashboard');
       return;
     }
-    
-    console.log('Session found, fetching forms');
-    // Small delay to ensure session is fully established
-    const timer = setTimeout(() => {
-      fetchForms();
-      fetchTemplates();
-    }, 300);
-    
-    return () => clearTimeout(timer);
+
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.allSettled([fetchForms(), fetchTemplates()]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
   }, [session, status, router]);
 
   const fetchForms = async () => {
@@ -62,8 +51,6 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Failed to fetch forms:', error);
       setForms([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 
