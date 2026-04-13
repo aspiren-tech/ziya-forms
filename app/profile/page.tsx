@@ -7,7 +7,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ImageCropPicker } from '@/components/forms/ImageCropPicker';
-import { ArrowLeft, CalendarDays, Mail, Shield, Sparkles, UserRound } from 'lucide-react';
+import { getInitials } from '@/lib/utils';
+import { ArrowLeft, CalendarDays, Mail, Shield, Sparkles } from 'lucide-react';
 
 type ProfileData = {
   id: string;
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -57,6 +59,10 @@ export default function ProfilePage() {
     loadProfile();
   }, [router, session, status]);
 
+  useEffect(() => {
+    setAvatarError(false);
+  }, [profile?.avatar_url]);
+
   const saveProfile = async () => {
     if (!profile) return;
 
@@ -77,6 +83,8 @@ export default function ProfilePage() {
       }
 
       setProfile(data.user || profile);
+      window.dispatchEvent(new Event('profile-updated'));
+      router.refresh();
     } catch (error) {
       console.error('Failed to save profile:', error);
       alert('Failed to update profile');
@@ -87,8 +95,32 @@ export default function ProfilePage() {
 
   if (status === 'loading' || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-white" />
+      <div className="min-h-screen bg-[color:var(--bg-primary-light)] px-6 py-8 dark:bg-[color:var(--bg-primary)]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6">
+          <div className="flex items-center justify-between">
+            <div className="h-11 w-36 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+            <div className="hidden h-9 w-32 rounded-full bg-slate-200/80 dark:bg-slate-800/80 animate-pulse md:block" />
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="h-52 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+              <div className="mt-6 space-y-3">
+                <div className="h-4 w-1/3 rounded bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-4 w-2/3 rounded bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-4 w-1/2 rounded bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+              </div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="space-y-4">
+                <div className="h-6 w-40 rounded bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-12 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-12 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-48 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+                <div className="h-12 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -120,11 +152,18 @@ export default function ProfilePage() {
               style={{ background: 'linear-gradient(135deg, var(--bg-secondary), var(--brand-primary), var(--brand-accent))' }}
             >
               <div className="flex items-center gap-4">
-                <div className="flex h-18 w-18 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-xl ring-1 ring-white/15">
-                  {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt={profile?.full_name || 'Profile'} className="h-full w-full object-cover" />
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-white/10 shadow-xl ring-1 ring-white/15">
+                  {profile?.avatar_url && !avatarError ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile?.full_name || 'Profile'}
+                      className="h-full w-full object-cover"
+                      onError={() => setAvatarError(true)}
+                    />
                   ) : (
-                    <UserRound className="h-8 w-8" />
+                    <span className="text-lg font-semibold uppercase">
+                      {getInitials(profile?.full_name || session.user?.name || profile?.email || 'Profile')}
+                    </span>
                   )}
                 </div>
                 <div>

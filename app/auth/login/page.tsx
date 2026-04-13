@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/Button';
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Chrome } from 'lucide-react';
 import { getSession, signIn, useSession } from 'next-auth/react';
+import { Chrome, ShieldCheck, Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/Button';
 
 const getDestinationForRole = (role?: string | null) => {
   return role === 'super_admin' ? '/admin/dashboard' : '/dashboard';
@@ -19,49 +21,46 @@ export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
 
-  // Check if user is already logged in
   useEffect(() => {
-    console.log('LoginPage useEffect - status:', status);
-    if (status === 'authenticated') {
-      const redirectAuthenticatedUser = async () => {
-        const currentSession = session ?? (await getSession());
-        console.log('User already authenticated, redirecting by role');
-        router.replace(getDestinationForRole(currentSession?.user?.role));
-      };
-
-      void redirectAuthenticatedUser();
+    if (status !== 'authenticated') {
+      return;
     }
+
+    const redirectAuthenticatedUser = async () => {
+      const currentSession = session ?? (await getSession());
+      router.replace(getDestinationForRole(currentSession?.user?.role));
+    };
+
+    void redirectAuthenticatedUser();
   }, [session, status, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      console.log('Attempting to sign in with credentials:', { email });
       const result = await signIn('credentials', {
         email,
         password,
-        redirect: false, // We'll handle the redirect manually
+        redirect: false,
       });
-      
-      console.log('Sign in result:', result);
-      
+
       if (result?.error) {
         setError('Invalid email or password');
-        setLoading(false);
-      } else if (result?.ok) {
-        console.log('Sign in successful, redirecting by role');
+        return;
+      }
+
+      if (result?.ok) {
         const currentSession = await getSession();
         router.replace(getDestinationForRole(currentSession?.user?.role));
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-        setLoading(false);
+        return;
       }
-    } catch (err) {
-      console.error('Sign in error:', err);
+
       setError('An unexpected error occurred. Please try again.');
+    } catch {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -69,138 +68,133 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+
     try {
-      console.log('Attempting Google sign in');
-      // For Google sign-in, we let NextAuth handle the redirect
       const result = await signIn('google', { callbackUrl: '/dashboard' });
-      console.log('Google sign in result:', result);
-      
-      // If there's an error, handle it
+
       if (result?.error) {
-        setError('Failed to sign in with Google: ' + result.error);
+        setError(`Failed to sign in with Google: ${result.error}`);
         setLoading(false);
       }
-    } catch (err) {
-      console.error('Google sign in error:', err);
+    } catch {
       setError('Failed to sign in with Google. Please try again.');
       setLoading(false);
     }
   };
 
-  // Don't render anything while checking session status
-  if (status === 'loading') {
+  if (status === 'loading' || status === 'authenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  // If already authenticated, don't show login form
-  if (status === 'authenticated') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-[color:var(--brand-primary-light)] dark:border-[color:var(--brand-accent)]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50 dark:from-gray-900 dark:to-gray-800 px-4">
+    <div className="min-h-screen px-4 py-10 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_34%),linear-gradient(180deg,_#f8fbff_0%,_#eef6ff_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.14),_transparent_34%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)] sm:px-6 lg:px-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md"
+        className="mx-auto w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 shadow-[0_24px_90px_rgba(15,23,42,0.12)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/70"
       >
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold gradient-text mb-2 font-[family-name:var(--font-poppins)]">
-            Welcome to Ziya Forms
+        <div className="border-b border-slate-200/70 bg-slate-50/80 px-6 py-6 text-center dark:border-slate-800 dark:bg-slate-900/40 sm:px-8">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/70 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <Image
+              src="/ziyavoicelogo.png"
+              alt="Ziya Forms"
+              width={56}
+              height={56}
+              className="h-full w-full object-cover"
+              priority
+            />
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--active-nav-light)] bg-[color:var(--active-nav-light)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--brand-primary-light)] dark:border-[color:var(--border-default)] dark:bg-[color:var(--bg-surface-hover)] dark:text-[color:var(--brand-accent)]">
+            <Sparkles className="h-3.5 w-3.5" />
+            Secure access
+          </div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-[color:var(--text-primary-light)] dark:text-white sm:text-3xl">
+            Welcome back
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Sign in to start creating amazing forms
+          <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary-light)] dark:text-slate-300">
+            Sign in to continue building and managing forms.
           </p>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm">
-            {error}
-          </div>
-        )}
+        <div className="px-6 py-6 sm:px-8">
+          {error && (
+            <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
+              {error}
+            </div>
+          )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              placeholder="your@email.com"
-              required
-            />
-          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="mb-1 block text-sm font-medium text-[color:var(--text-primary-light)] dark:text-slate-200">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[color:var(--text-primary-light)] outline-none transition focus:border-[color:var(--brand-primary-light)] focus:ring-2 focus:ring-[color:var(--active-nav-light)]/70 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-[color:var(--brand-accent)]"
+                placeholder="your@email.com"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              placeholder="••••••••"
-              required
-            />
+            <div>
+              <label htmlFor="password" className="mb-1 block text-sm font-medium text-[color:var(--text-primary-light)] dark:text-slate-200">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-[color:var(--text-primary-light)] outline-none transition focus:border-[color:var(--brand-primary-light)] focus:ring-2 focus:ring-[color:var(--active-nav-light)]/70 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-[color:var(--brand-accent)]"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              className="w-full justify-center gap-3 py-3 text-base font-semibold shadow-lg shadow-blue-500/20"
+              disabled={loading}
+            >
+              {loading ? <span>Signing in...</span> : <span>Sign in</span>}
+            </Button>
+          </form>
+
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">or</span>
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
           </div>
 
           <Button
-            type="submit"
-            variant="primary"
-            className="w-full flex items-center justify-center gap-3 text-lg py-3"
+            variant="outline"
+            className="w-full justify-center gap-3 py-3 text-base font-semibold"
+            onClick={handleGoogleSignIn}
             disabled={loading}
           >
-            {loading ? (
-              <span>Signing in...</span>
-            ) : (
-              <span>Sign in</span>
-            )}
+            <Chrome className="h-5 w-5" />
+            Sign in with Google
           </Button>
-        </form>
 
-        <div className="my-4 flex items-center">
-          <div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div>
-          <span className="mx-4 text-gray-500 dark:text-gray-400 text-sm">OR</span>
-          <div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div>
-        </div>
-
-        <Button
-          variant="outline"
-          className="w-full flex items-center justify-center gap-3 text-lg py-3"
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-        >
-          <Chrome className="w-5 h-5" />
-          Sign in with Google
-        </Button>
-
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="mt-6 rounded-2xl bg-[color:var(--bg-primary-light)] px-4 py-3 text-center text-sm text-[color:var(--text-secondary-light)] dark:bg-slate-900/60 dark:text-slate-300">
             Don't have an account?{' '}
-            <a href="/auth/register" className="text-blue-600 hover:underline dark:text-blue-400">
+            <Link href="/auth/register" className="font-semibold text-[color:var(--brand-primary-light)] hover:underline dark:text-[color:var(--brand-accent)]">
               Create one
-            </a>
-          </p>
-        </div>
+            </Link>
+          </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            By signing in, you agree to our Terms of Service and Privacy Policy
-          </p>
+          <div className="mt-4 flex items-center gap-2 text-xs text-[color:var(--text-muted)] dark:text-slate-400">
+            <ShieldCheck className="h-4 w-4 text-[color:var(--brand-primary-light)] dark:text-[color:var(--brand-accent)]" />
+            By signing in, you agree to our Terms of Service and Privacy Policy.
+          </div>
         </div>
       </motion.div>
     </div>
