@@ -33,14 +33,6 @@ jobs:
           context: .
           file: ./Dockerfile.ui 
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/ziya-forms-ui:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/ziya-forms:latest
 
-      - name: Build and push API
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.api
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/ziya-forms-api:latest
 
-          
