@@ -26,7 +26,7 @@ export function getNextAuthBasePath() {
   }
 
   if (!API_BASE_URL) {
-    return '/api/auth';
+    return '/auth';
   }
 
   if (/^https?:\/\//i.test(API_BASE_URL)) {
@@ -37,5 +37,5 @@ export function getNextAuthBasePath() {
     return `${API_BASE_URL}/auth`;
   }
 
-  return `${API_BASE_URL}/api/auth`;
+  return `${API_BASE_URL}/auth`;
 }

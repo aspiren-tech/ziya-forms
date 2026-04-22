@@ -12,6 +12,16 @@ function validateEnvironment() {
     errors.push('NEXTAUTH_SECRET is not set');
   }
 
+  if (process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL) {
+    errors.push('NEXTAUTH_URL is not set for production');
+  }
+
+  const hasGoogleClientId = !!process.env.GOOGLE_CLIENT_ID;
+  const hasGoogleClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+  if (hasGoogleClientId !== hasGoogleClientSecret) {
+    errors.push('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must both be set together');
+  }
+
   if (errors.length > 0) {
     throw new Error(`Missing environment variables: ${errors.join(', ')}`);
   }
@@ -29,32 +39,19 @@ export function getNextAuthUrl() {
   return 'http://localhost:4000';
 }
 
-export function getNextAuthBasePath() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
-  const explicitBasePath = process.env.NEXT_PUBLIC_NEXTAUTH_BASE_PATH?.replace(/\/$/, '');
-
-  if (explicitBasePath) {
-    return explicitBasePath;
+export function getNextAuthUrlInternal() {
+  if (process.env.NEXTAUTH_URL_INTERNAL) {
+    return process.env.NEXTAUTH_URL_INTERNAL;
   }
 
-  if (!apiUrl) {
-    return '/api/auth';
-  }
-
-  if (/^https?:\/\//i.test(apiUrl)) {
-    return `${apiUrl}/api/auth`;
-  }
-
-  if (apiUrl.endsWith('/api')) {
-    return `${apiUrl}/auth`;
-  }
-
-  return `${apiUrl}/api/auth`;
+  const port = process.env.PORT || '4000';
+  return `http://127.0.0.1:${port}`;
 }
 
 validateEnvironment();
 
 process.env.NEXTAUTH_URL = getNextAuthUrl();
+process.env.NEXTAUTH_URL_INTERNAL = getNextAuthUrlInternal();
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
